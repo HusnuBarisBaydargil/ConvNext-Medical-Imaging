@@ -36,17 +36,16 @@ class NiftiDataset(Dataset):
         return zoom(img, zoom_factors, order=1)
 
 def prepare_data(data_dir, test_size=0.2, val_size=0.1, batch_size=4, resize_shape=(128, 128, 128), shuffle=True, num_workers=0, return_loaders=True):
-    ad_path = os.path.join(data_dir, "AD")
-    nc_path = os.path.join(data_dir, "NC")
+    class_dirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
+    
+    image_paths = []
+    labels = []
 
-    ad_images = [os.path.join(ad_path, img) for img in os.listdir(ad_path)]
-    nc_images = [os.path.join(nc_path, img) for img in os.listdir(nc_path)]
-
-    ad_labels = [0] * len(ad_images)
-    nc_labels = [1] * len(nc_images)
-
-    image_paths = ad_images + nc_images
-    labels = ad_labels + nc_labels
+    for i, class_name in enumerate(sorted(class_dirs)):
+        class_path = os.path.join(data_dir, class_name)
+        class_images = [os.path.join(class_path, img) for img in os.listdir(class_path)]
+        image_paths.extend(class_images)
+        labels.extend([i] * len(class_images)) 
 
     train_paths, test_paths, train_labels, test_labels = train_test_split(image_paths, labels, test_size=test_size, random_state=42, stratify=labels)
     train_paths, val_paths, train_labels, val_labels = train_test_split(train_paths, train_labels, test_size=val_size, random_state=42, stratify=train_labels)

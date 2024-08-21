@@ -60,15 +60,3 @@ class ConvNeXt3D(nn.Module):
         x = self.norm(x)
         x = self.head(x)
         return x
-
-# # Initialize the model and dummy input
-# model = ConvNeXt3D()
-# model = model.to('cuda:2' if torch.cuda.is_available() else 'cpu')
-
-# # Create a dummy input with the shape [4, 1, 64, 64, 64]
-# dummy_input = torch.randn(4, 1, 64, 64, 64).to('cuda:2' if torch.cuda.is_available() else 'cpu')
-
-# # Forward pass through the model
-# output = model(dummy_input)
-# print(output.shape)
-# print(output)
