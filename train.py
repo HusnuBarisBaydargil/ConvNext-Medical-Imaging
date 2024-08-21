@@ -13,11 +13,11 @@ parser.add_argument('--data_dir', type=str, default="/path/to/adni/twoclass/fold
 parser.add_argument('--device', type=int, default=3, help='CUDA device number (default: 3)')
 parser.add_argument('--save_folder', type=str, default="/path/to/save/folder", help='Directory to save model weights')
 parser.add_argument('--num_epochs', type=int, default=20, help='Number of training epochs')
-parser.add_argument('--resize_shape', type=int, nargs=3, default=[128, 128, 128], help='Resize shape for the NIfTI images (default: 128x128x128)')
+parser.add_argument('--resize_shape', type=int, nargs=3, default=None, help='Resize shape for the NIfTI images (default: None for no resizing)')
 parser.add_argument('--test_size', type=float, default=0.2, help='Proportion of the data to be used as test set (default: 0.2)')
 parser.add_argument('--val_size', type=float, default=0.1, help='Proportion of the training data to be used as validation set (default: 0.1)')
 parser.add_argument('--batch_size', type=int, default=4, help='Batch size for the data loaders (default: 4)')
-parser.add_argument('--num_workers', type=int, default=6, help='Number of workers for the data loaders (default: 0)')
+parser.add_argument('--num_workers', type=int, default=6, help='Number of workers for the data loaders (default: 6)')
 parser.add_argument('--num_classes', type=int, default=2, help='Number of output classes (default: 2)')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for the optimizer (default: 0.001)')
 
@@ -28,7 +28,7 @@ train_loader, val_loader, test_loader = prepare_data(
     test_size=args.test_size,
     val_size=args.val_size,
     batch_size=args.batch_size,
-    resize_shape=tuple(args.resize_shape),
+    resize_shape=tuple(args.resize_shape) if args.resize_shape else None,
     num_workers=args.num_workers
 )
 

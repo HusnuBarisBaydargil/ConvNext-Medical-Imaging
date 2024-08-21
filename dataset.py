@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from scipy.ndimage import zoom
 
 class NiftiDataset(Dataset):
-    def __init__(self, image_paths, labels, resize_shape=(128, 128, 128), transform=None):
+    def __init__(self, image_paths, labels, resize_shape=None, transform=None):
         self.image_paths = image_paths
         self.labels = labels
         self.resize_shape = resize_shape
@@ -22,8 +22,11 @@ class NiftiDataset(Dataset):
 
         img = nib.load(img_path).get_fdata()
         img = (img - np.min(img)) / (np.max(img) - np.min(img))
+
         if self.resize_shape is not None:
-            img = self.resize_image(img, self.resize_shape)
+            if img.shape != tuple(self.resize_shape):
+                img = self.resize_image(img, self.resize_shape)
+
         img = np.expand_dims(img, axis=0)
 
         if self.transform:
@@ -35,7 +38,7 @@ class NiftiDataset(Dataset):
         zoom_factors = [resize_shape[i] / img.shape[i] for i in range(3)]
         return zoom(img, zoom_factors, order=1)
 
-def prepare_data(data_dir, test_size=0.2, val_size=0.1, batch_size=4, resize_shape=(128, 128, 128), shuffle=True, num_workers=0, return_loaders=True):
+def prepare_data(data_dir, test_size=0.2, val_size=0.1, batch_size=4, resize_shape=None, shuffle=True, num_workers=0, return_loaders=True):
     class_dirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
     
     image_paths = []
@@ -45,7 +48,7 @@ def prepare_data(data_dir, test_size=0.2, val_size=0.1, batch_size=4, resize_sha
         class_path = os.path.join(data_dir, class_name)
         class_images = [os.path.join(class_path, img) for img in os.listdir(class_path)]
         image_paths.extend(class_images)
-        labels.extend([i] * len(class_images)) 
+        labels.extend([i] * len(class_images))
 
     train_paths, test_paths, train_labels, test_labels = train_test_split(image_paths, labels, test_size=test_size, random_state=42, stratify=labels)
     train_paths, val_paths, train_labels, val_labels = train_test_split(train_paths, train_labels, test_size=val_size, random_state=42, stratify=train_labels)
