@@ -8,6 +8,7 @@ from dataset import prepare_data
 from datetime import datetime
 import argparse
 
+# Argument parsing
 parser = argparse.ArgumentParser(description="Train and validate ConvNeXt3D model")
 parser.add_argument('--data_dir', type=str, default="/path/to/adni/twoclass/folder", help='Path to the dataset directory')
 parser.add_argument('--device', type=int, default=3, help='CUDA device number (default: 3)')
@@ -18,10 +19,16 @@ parser.add_argument('--test_size', type=float, default=0.2, help='Proportion of 
 parser.add_argument('--val_size', type=float, default=0.1, help='Proportion of the training data to be used as validation set (default: 0.1)')
 parser.add_argument('--batch_size', type=int, default=4, help='Batch size for the data loaders (default: 4)')
 parser.add_argument('--num_workers', type=int, default=6, help='Number of workers for the data loaders (default: 6)')
-parser.add_argument('--num_classes', type=int, default=2, help='Number of output classes (default: 2)')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for the optimizer (default: 0.001)')
 
 args = parser.parse_args()
+
+class_names = sorted([d for d in os.listdir(args.data_dir) if os.path.isdir(os.path.join(args.data_dir, d))])
+args.num_classes = len(class_names)
+
+print(f"Detected {args.num_classes} classes:")
+for idx, class_name in enumerate(class_names):
+    print(f"{idx}: {class_name}")
 
 train_loader, val_loader, test_loader = prepare_data(
     data_dir=args.data_dir,
@@ -35,14 +42,12 @@ train_loader, val_loader, test_loader = prepare_data(
 device = torch.device(f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
 model = ConvNeXt3D(num_classes=args.num_classes).to(device)
 
-if args.num_classes == 2:
-    criterion = nn.BCEWithLogitsLoss()
-else:
-    criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
 timestamp = datetime.now().strftime('%Y%m%d_%H%M')
 weights_folder = os.path.join(args.save_folder, f"model_weights_{timestamp}")
+
 if not os.path.exists(weights_folder):
     os.makedirs(weights_folder)
 
@@ -51,9 +56,6 @@ def train(model, train_loader, criterion, optimizer, device):
     running_loss = 0.0
     for inputs, labels in tqdm(train_loader):
         inputs, labels = inputs.to(device), labels.to(device)
-
-        if args.num_classes == 2:
-            labels = labels.float().unsqueeze(1)
 
         optimizer.zero_grad()
         outputs = model(inputs)
@@ -73,16 +75,10 @@ def validate(model, val_loader, criterion, device):
         for inputs, labels in tqdm(val_loader):
             inputs, labels = inputs.to(device), labels.to(device)
 
-            if args.num_classes == 2:
-                labels = labels.float().unsqueeze(1)
-
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item() * inputs.size(0)
-            if args.num_classes == 2:
-                preds = (outputs > 0).int()
-            else:
-                _, preds = torch.max(outputs, 1)
+            _, preds = torch.max(outputs, 1)
             correct += torch.sum(preds == labels).item()
             total += labels.size(0)
     epoch_loss = running_loss / len(val_loader.dataset)
@@ -97,13 +93,8 @@ def test(model, test_loader, device):
         for inputs, labels in tqdm(test_loader):
             inputs, labels = inputs.to(device), labels.to(device)
 
-            if args.num_classes == 2:
-                labels = labels.float().unsqueeze(1)
             outputs = model(inputs)
-            if args.num_classes == 2:
-                preds = (outputs > 0).int()
-            else:
-                _, preds = torch.max(outputs, 1)
+            _, preds = torch.max(outputs, 1)
             correct += torch.sum(preds == labels).item()
             total += labels.size(0)
     accuracy = correct / total
