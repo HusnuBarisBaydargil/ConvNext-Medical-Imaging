@@ -1,7 +1,6 @@
 # ConvNeXt3D Model Training
 
-This repository contains the code to train a ConvNeXt3D model on 3D medical imaging data, such as NIfTI images. The script allows you to customize various aspects of the training process, including the dataset path, model parameters, and training configurations.
-
+This repository contains the code to train a ConvNeXt3D model on 3D NIfTI images. The script allows you to customize various aspects of the training process, including the dataset path, model parameters, and training configurations. If you'd like to change the voxel size of your images before training, modify `--resize-shape None` to `--resize-shape value value value`. 
 ## Running the Training Script
 
 To run the training script, use the following command and change the variables accordingly:
@@ -12,7 +11,7 @@ python train.py --data_dir /path/to/your/data \
                 --num_classes 2 \
                 --device 3 \
                 --num_epochs 50 \
-                --resize_shape 128 128 128 \
+                --resize_shape None \
                 --test_size 0.2 \
                 --val_size 0.1 \
                 --batch_size 4 \
