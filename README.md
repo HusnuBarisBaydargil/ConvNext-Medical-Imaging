@@ -42,6 +42,6 @@ python train.py --data_dir /path/to/your/data \
                 --val_size 0.1 \
                 --batch_size 4 \
                 --num_workers 6 \
-                --learning_rate 0.01 \
+                --learning_rate 0.001 \
                 --augment
 ```
