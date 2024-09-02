@@ -8,6 +8,10 @@ import argparse
 from dataset import prepare_data
 from convnext import ConvNeXt3D, ConvNeXt2D
 from sklearn.metrics import accuracy_score
+<<<<<<< HEAD
+=======
+import numpy as np
+>>>>>>> origin/main
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train and validate ConvNeXt model")
@@ -37,7 +41,10 @@ def validate_args(args):
 def get_model(args, axis=None):
     """ Returns a ConvNeXt model. For 2D models, `axis` can specify which axis the model is for. """
     if args.model_type == '3D':
+<<<<<<< HEAD
         print(f"Initializing ConvNeXt3D model")
+=======
+>>>>>>> origin/main
         return ConvNeXt3D(in_chans=1, num_classes=args.num_classes).to(args.device)
     else:
         model_cls = ConvNeXt2D
@@ -46,6 +53,7 @@ def get_model(args, axis=None):
             print(f"Initializing ConvNeXt2D model for {axis} axis")
         return model_cls(in_chans=1, num_classes=args.num_classes).to(args.device)
 
+<<<<<<< HEAD
 def save_all_models(models, epoch, val_acc, weights_folder, use_all_axes, model_type):
     """ Save all models' weights in one file or save the single model's weights. """
     print(f"Saving models for epoch {epoch+1}, validation accuracy: {val_acc:.4f}")
@@ -66,6 +74,12 @@ def save_all_models(models, epoch, val_acc, weights_folder, use_all_axes, model_
         print(f"Successfully saved models to {save_path}")
     except Exception as e:
         print(f"Error saving models: {e}")
+=======
+def save_model(model, epoch, val_acc, weights_folder, axis=None):
+    axis_suffix = f"_{axis}" if axis else ""
+    weight_filename = f"epoch_{epoch+1}_val_acc_{val_acc:.4f}{axis_suffix}.pth"
+    torch.save(model.state_dict(), os.path.join(weights_folder, weight_filename))
+>>>>>>> origin/main
 
 def create_save_folder(args):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M')
@@ -73,6 +87,7 @@ def create_save_folder(args):
     os.makedirs(weights_folder, exist_ok=True)
     return weights_folder
 
+<<<<<<< HEAD
 def train_one_epoch(args, models, loaders, criterion, optimizers, device):
     """ Train all models for one epoch """
     for model in models.values():
@@ -81,6 +96,20 @@ def train_one_epoch(args, models, loaders, criterion, optimizers, device):
     running_loss = 0.0
     correct_preds = 0
     total_samples = 0
+=======
+def train_one_epoch(model, dataloader, criterion, optimizer, device):
+    model.train()
+    running_loss, correct, total = 0.0, 0, 0
+
+    for inputs, labels in tqdm(dataloader, desc="Training"):
+        inputs, labels = inputs.to(device), labels.to(device)
+        optimizer.zero_grad()
+
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+>>>>>>> origin/main
 
     all_labels = []
     all_preds = []  # Store predictions
@@ -90,6 +119,7 @@ def train_one_epoch(args, models, loaders, criterion, optimizers, device):
         dataloader = loaders[axis][0]  # Train loader
         optimizer = optimizers[axis]
 
+<<<<<<< HEAD
         for inputs, labels in tqdm(dataloader, desc=f"Training {axis}"):
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -126,6 +156,69 @@ def validate_one_epoch(args, models, loaders, criterion, device):
     for axis in models.keys():
         model = models[axis]
         dataloader = loaders[axis][1]  # Validation loader
+=======
+def validate_one_epoch(models, dataloaders, criterion, device, use_all_axes=False):
+    all_preds = []
+    all_labels = []
+
+    for model, dataloader in zip(models, dataloaders):
+        model.eval()
+        preds_list = []
+        labels_list = []
+
+        with torch.no_grad():
+            for inputs, labels in tqdm(dataloader, desc="Validating"):
+                inputs, labels = inputs.to(device), labels.to(device)
+
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+
+                _, preds = torch.max(outputs, 1)
+                preds_list.append(preds.cpu().numpy())
+                labels_list.append(labels.cpu().numpy())
+
+        all_preds.append(np.concatenate(preds_list))
+        all_labels = np.concatenate(labels_list)
+
+    if use_all_axes:
+        # Ensemble validation with hard voting
+        all_preds = np.array(all_preds)
+        ensemble_preds = np.apply_along_axis(lambda x: np.bincount(x).argmax(), axis=0, arr=all_preds)
+        accuracy = accuracy_score(all_labels, ensemble_preds)
+    else:
+        accuracy = accuracy_score(all_labels, all_preds[0])
+
+    return accuracy
+
+def test_model(models, dataloaders, device, use_all_axes=False):
+    correct, total = 0, 0
+    all_preds = []
+
+    for model, dataloader in zip(models, dataloaders):
+        model.eval()
+        preds_list = []
+
+        with torch.no_grad():
+            for inputs, labels in tqdm(dataloader, desc="Testing"):
+                inputs, labels = inputs.to(device), labels.to(device)
+
+                outputs = model(inputs)
+                _, preds = torch.max(outputs, 1)
+                preds_list.append(preds.cpu().numpy())
+
+                if not use_all_axes:
+                    correct += torch.sum(preds == labels).item()
+                    total += labels.size(0)
+
+        all_preds.append(np.concatenate(preds_list))
+
+    if use_all_axes:
+        # Hard voting ensemble
+        all_preds = np.array(all_preds)
+        ensemble_preds = np.apply_along_axis(lambda x: np.bincount(x).argmax(), axis=0, arr=all_preds)
+        correct = np.sum(ensemble_preds == labels.cpu().numpy())
+        total = len(labels)
+>>>>>>> origin/main
 
         axis_preds = []
         axis_labels = []
@@ -178,7 +271,6 @@ def test_model(args, models, loaders, device):
     print(f'Test Accuracy: {accuracy:.4f}')
     return accuracy
 
-
 def main():
     args = parse_args()
     validate_args(args)
@@ -187,6 +279,7 @@ def main():
     args.num_classes = len(class_names)
     print(f"Detected {args.num_classes} classes: {', '.join(class_names)}")
 
+<<<<<<< HEAD
     if args.use_all_axes and args.model_type == '2D':
         loaders = {}
         models = {}
@@ -194,6 +287,12 @@ def main():
         axes = ['axial', 'coronal', 'sagittal']
         for axis in axes:
             print(f"Preparing data for {axis} axis")
+=======
+    if args.use_all_axes:
+        loaders = []
+        models = []
+        for axis in ['axial', 'coronal', 'sagittal']:
+>>>>>>> origin/main
             train_loader, val_loader, test_loader = prepare_data(
                 data_dir=args.data_dir,
                 test_size=args.test_size,
@@ -206,12 +305,18 @@ def main():
                 class_names=class_names,
                 augment=args.augment
             )
+<<<<<<< HEAD
             loaders[axis] = (train_loader, val_loader, test_loader)
             models[axis] = get_model(args, axis=axis)
             optimizers[axis] = optim.Adam(models[axis].parameters(), lr=args.learning_rate)
             print(f"Model for {axis} axis initialized")
     else:
         print(f"Preparing data for model: {args.model_type}, Axis: {args.slice_axis if args.model_type == '2D' else 'N/A'}")
+=======
+            loaders.append((train_loader, val_loader, test_loader))
+            models.append(get_model(args, axis=axis))
+    else:
+>>>>>>> origin/main
         train_loader, val_loader, test_loader = prepare_data(
             data_dir=args.data_dir,
             test_size=args.test_size,
@@ -224,15 +329,21 @@ def main():
             class_names=class_names,
             augment=args.augment
         )
+<<<<<<< HEAD
         models = {args.slice_axis: get_model(args)} if args.model_type == '2D' else {'axial': get_model(args)}
         loaders = {args.slice_axis: (train_loader, val_loader, test_loader)} if args.model_type == '2D' else {'axial': (train_loader, val_loader, test_loader)}
         optimizers = {args.slice_axis: optim.Adam(models[args.slice_axis].parameters(), lr=args.learning_rate)} if args.model_type == '2D' else {'axial': optim.Adam(models['axial'].parameters(), lr=args.learning_rate)}
         axes = [args.slice_axis] if args.model_type == '2D' else ['axial']
+=======
+        models = [get_model(args)]
+        loaders = [(train_loader, val_loader, test_loader)]
+>>>>>>> origin/main
 
     device = torch.device(f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
     args.device = device
 
     criterion = nn.CrossEntropyLoss()
+<<<<<<< HEAD
     weights_folder = create_save_folder(args)
     print(f"Weights will be saved in {weights_folder}")
 
@@ -246,6 +357,20 @@ def main():
 
     test_accuracy = test_model(args, models, loaders, device)
     print(f"Test Accuracy: {test_accuracy:.4f}")
+=======
+    for model, (train_loader, val_loader, _) in zip(models, loaders):
+        optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+        weights_folder = create_save_folder(args)
+
+        for epoch in range(args.num_epochs):
+            train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
+            val_acc = validate_one_epoch(models, [loader[1] for loader in loaders], criterion, device, use_all_axes=args.use_all_axes)
+            print(f'Epoch {epoch+1}/{args.num_epochs}, Train Loss: {train_loss:.4f}, Train Accuracy: {train_acc:.4f}, Validation Accuracy: {val_acc:.4f}')
+
+            save_model(model, epoch, val_acc, weights_folder, axis=args.slice_axis if not args.use_all_axes else axis)
+
+    test_accuracy = test_model(models, [loader[2] for loader in loaders], device, use_all_axes=args.use_all_axes)
+>>>>>>> origin/main
 
 if __name__ == "__main__":
     main()

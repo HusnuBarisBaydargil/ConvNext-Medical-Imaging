@@ -1,6 +1,7 @@
 # ConvNeXt3D & ConvNeXt2D Model Training
 
 This repository contains the code to train ConvNeXt models on 3D NIfTI images or 2D slices derived from these images. The script allows you to customize various aspects of the training process, including the dataset path, model parameters, and training configurations. You can also specify the model type (2D or 3D), the axis along which 2D slices should be taken, and whether to apply data augmentation during training.
+If you only have DICOM files with extensions such as this, `/Path/to/ADNI/AD/003_S_1059/Coreg,_Avg,_Std_Img_and_Vox_Siz,_Uniform_Resolution/2007-01-10_11_15_31.0/I37090/ADNI_003_S_1059_PT_Coreg,_Avg,_Std_Img_and_Vox_Siz,_Uniform_Resolution_Br_20070122123023427_1_S25144_I37090.dcm`, you can convert them into NIfTI format using the script `dicom_to_nifti.py`
 
 # Model Types
 
@@ -42,7 +43,7 @@ python train.py --data_dir /path/to/your/data \
                 --val_size 0.1 \
                 --batch_size 4 \
                 --num_workers 6 \
-                --learning_rate 0.01 \
+                --learning_rate 0.001 \
                 --augment
 ```
 
