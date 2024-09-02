@@ -75,6 +75,6 @@ python test.py \
     --model_weights /path/to/model/dir/model.pth \
     --model_type 3D \
     --device 3 \
-    --batch_size 32 \
-    --num_workers 32 
+    --batch_size 6 \
+    --num_workers 6 
 ```
