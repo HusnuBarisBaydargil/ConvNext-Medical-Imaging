@@ -16,13 +16,13 @@ class ConvNeXtBlockBase(nn.Module):
         shortcut = x
         x = self.dwconv(x)
         x = self.norm(x)
-        x = x.permute(0, *range(2, x.ndim), 1)  # Permute to (..., C) for linear layer
+        x = x.permute(0, *range(2, x.ndim), 1)
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.pwconv2(x)
         if self.gamma is not None:
             x = self.gamma * x
-        x = x.permute(0, -1, *range(1, x.ndim - 1))  # Permute back to (N, C, ...)
+        x = x.permute(0, -1, *range(1, x.ndim - 1)) 
         x = shortcut + self.drop_path(x)
         return x
 
@@ -61,6 +61,7 @@ class ConvNeXtBase(nn.Module):
         x = self.norm(x)
         x = self.head(x)
         return x
+
 
 class ConvNeXt3D(ConvNeXtBase):
     def __init__(self, in_chans=1, num_classes=2, depths=[3, 3, 9, 3], dims=[96, 192, 384, 768]):

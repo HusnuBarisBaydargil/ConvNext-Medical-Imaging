@@ -45,3 +45,35 @@ python train.py --data_dir /path/to/your/data \
                 --learning_rate 0.01 \
                 --augment
 ```
+
+# Example for Multi-dimensional 2D Model
+
+To train a ConvNeXt2D model on all 2D slices (axial, coronal, and sagittal), use the following command:
+
+```bash
+python train.py --data_dir /path/to/your/data \
+                --save_folder /path/to/save/weights \
+                --model_type 2D \
+                --num_classes 2 \
+                --device 3 \
+                --num_epochs 50 \
+                --test_size 0.2 \
+                --val_size 0.1 \
+                --batch_size 4 \
+                --num_workers 6 \
+                --learning_rate 0.001 \
+                -- use_all_axes \
+                --augment
+```
+
+# Testing the model with saved weights
+
+```bash
+python test.py \
+    --data_dir /path/to/data/dir \
+    --model_weights /path/to/model/dir/model.pth \
+    --model_type 3D \
+    --device 3 \
+    --batch_size 32 \
+    --num_workers 32 
+```

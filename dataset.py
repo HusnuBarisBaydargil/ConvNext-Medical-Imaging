@@ -9,22 +9,27 @@ import torchvision.transforms as transforms
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Union
 
+def normalize_image(img: np.ndarray) -> np.ndarray:
+    return (img - np.min(img)) / (np.max(img) - np.min(img))
+
+def resize_image(img: np.ndarray, resize_shape: Tuple[int, ...]) -> np.ndarray:
+    zoom_factors = [resize_shape[i] / img.shape[i] for i in range(len(resize_shape))]
+    return zoom(img, zoom_factors, order=1)
+
 @dataclass
-class NiftiDataset3D(Dataset):
+class NiftiDatasetBase(Dataset):
     image_paths: List[str]
     labels: List[int]
-    resize_shape: Optional[Tuple[int, int, int]] = None
+    resize_shape: Optional[Tuple[int, ...]] = None
     augment: bool = False
     transform: Optional[transforms.Compose] = field(default=None, init=False)
 
     def __post_init__(self):
         if self.augment:
-            self.transform = transforms.Compose([
-                transforms.RandomRotation(10),
-                transforms.RandomHorizontalFlip(),
-            ])
+            self.transform = self.build_transforms()
+        print(f"Initialized dataset with {len(self.image_paths)} images.")
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.image_paths)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -34,10 +39,10 @@ class NiftiDataset3D(Dataset):
 
     def _load_and_preprocess_image(self, img_path: str) -> torch.Tensor:
         img = nib.load(img_path).get_fdata()
-        img = (img - np.min(img)) / (np.max(img) - np.min(img))
+        img = normalize_image(img)
 
         if self.resize_shape and img.shape != tuple(self.resize_shape):
-            img = self._resize_image(img, self.resize_shape)
+            img = resize_image(img, self.resize_shape)
 
         img = np.expand_dims(img, axis=0)
         img = torch.tensor(img, dtype=torch.float32)
@@ -47,28 +52,25 @@ class NiftiDataset3D(Dataset):
 
         return img
 
-    def _resize_image(self, img: np.ndarray, resize_shape: Tuple[int, int, int]) -> np.ndarray:
-        zoom_factors = [resize_shape[i] / img.shape[i] for i in range(3)]
-        return zoom(img, zoom_factors, order=1)
+    def build_transforms(self) -> transforms.Compose:
+        raise NotImplementedError("This method should be implemented by subclasses.")
 
 @dataclass
-class NiftiDataset2D(Dataset):
-    image_paths: List[str]
-    labels: List[int]
-    resize_shape: Optional[Tuple[int, int]] = None
+class NiftiDataset3D(NiftiDatasetBase):
+    def build_transforms(self) -> transforms.Compose:
+        return transforms.Compose([
+            transforms.RandomRotation(10),
+            transforms.RandomHorizontalFlip(),
+        ])
+
+@dataclass
+class NiftiDataset2D(NiftiDatasetBase):
     slice_axis: str = 'axial'
-    augment: bool = False
-    transform: Optional[transforms.Compose] = field(default=None, init=False)
     slices_per_volume: List[int] = field(default_factory=list, init=False)
     sliced_images: List[np.ndarray] = field(default_factory=list, init=False)
 
     def __post_init__(self):
-        if self.augment:
-            self.transform = transforms.Compose([
-                transforms.RandomRotation(10),
-                transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
-                transforms.RandomHorizontalFlip(),
-            ])
+        super().__post_init__()
         self.slice_axis = self.slice_axis.lower()
         self._prepare_slices()
 
@@ -78,38 +80,60 @@ class NiftiDataset2D(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         img_slice = torch.tensor(self.sliced_images[idx], dtype=torch.float32)
         label = torch.tensor(self.labels[idx], dtype=torch.long)
-
         if self.transform:
             img_slice = self.transform(img_slice)
-
         return img_slice, label
 
     def _prepare_slices(self):
-        for img_path in self.image_paths:
+        all_slices = []
+        all_labels = []
+        
+        print(f"Preparing slices for {len(self.image_paths)} images...")
+
+        for img_idx, (img_path, label) in enumerate(zip(self.image_paths, self.labels)):
             img = nib.load(img_path).get_fdata()
-            img = (img - np.min(img)) / (np.max(img) - np.min(img))
+            img = normalize_image(img)
 
             slices = self._get_slices(img)
             if self.resize_shape:
-                slices = [self._resize_image(s, self.resize_shape) for s in slices]
+                slices = [resize_image(s, self.resize_shape) for s in slices]
 
-            self.sliced_images.extend(np.expand_dims(s, axis=0) for s in slices)
-            self.slices_per_volume.append(len(slices))
+            if self.augment:
+                slices = self.apply_deterministic_augmentation(slices)
 
-        self.labels = [label for label, count in zip(self.labels, self.slices_per_volume) for _ in range(count)]
+            all_slices.extend(np.expand_dims(s, axis=0) for s in slices)
+            all_labels.extend([label] * len(slices))
+            
+        self.sliced_images = all_slices
+        self.labels = all_labels
+        
+        print(f"Total slices: {len(self.sliced_images)}, Total labels: {len(self.labels)}")
 
     def _get_slices(self, img: np.ndarray) -> List[np.ndarray]:
         axis_map = {'axial': 2, 'coronal': 1, 'sagittal': 0}
         axis = axis_map.get(self.slice_axis)
-
         if axis is None:
             raise ValueError("Invalid slice_axis, choose from 'axial', 'coronal', 'sagittal'.")
+        slices = [np.take(img, i, axis=axis) for i in range(img.shape[axis])]
+        return slices
 
-        return [np.take(img, i, axis=axis) for i in range(img.shape[axis])]
+    def apply_deterministic_augmentation(self, slices: List[np.ndarray]) -> List[np.ndarray]:
+        """Apply the same random augmentation to all slices."""
+        transform = self.build_transforms()
+        augmented_slices = []
+        for s in slices:
+            s = np.expand_dims(s, axis=0)
+            s = transform(torch.tensor(s, dtype=torch.float32)) 
+            augmented_slices.append(s.squeeze(0).numpy())
+        return augmented_slices
 
-    def _resize_image(self, img: np.ndarray, resize_shape: Tuple[int, int]) -> np.ndarray:
-        zoom_factors = [resize_shape[i] / img.shape[i] for i in range(2)]
-        return zoom(img, zoom_factors, order=1)
+    def build_transforms(self) -> transforms.Compose:
+        return transforms.Compose([
+            transforms.RandomRotation(degrees=10),
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+            transforms.RandomHorizontalFlip(),
+        ])
+
 
 def prepare_data(
     data_dir: str, 
@@ -126,31 +150,33 @@ def prepare_data(
     augment: bool = False
 ) -> Union[Tuple[DataLoader, DataLoader, DataLoader], Tuple[Dataset, Dataset, Dataset]]:
     
-    class_dirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
-    image_paths = []
-    labels = []
-    class_counts = {}
+    class_dirs = sorted([d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))])
+    image_paths = [os.path.join(data_dir, class_name, img) 
+                   for class_name in class_dirs 
+                   for img in os.listdir(os.path.join(data_dir, class_name))]
+    labels = [i for i, class_name in enumerate(class_dirs) for _ in os.listdir(os.path.join(data_dir, class_name))]
 
-    for i, class_name in enumerate(sorted(class_dirs)):
-        class_path = os.path.join(data_dir, class_name)
-        class_images = [os.path.join(class_path, img) for img in os.listdir(class_path)]
-        image_paths.extend(class_images)
-        labels.extend([i] * len(class_images))
-        class_counts[class_name] = len(class_images)
+    print(f"Total images: {len(image_paths)}, Total labels: {len(labels)}")
+
+    DatasetClass = NiftiDataset3D if dataset_type == '3D' else NiftiDataset2D
+    dataset_args = {'resize_shape': resize_shape, 'augment': augment}
+    if dataset_type == '2D':
+        dataset_args['slice_axis'] = slice_axis
+
+    if test_size == 1.0:
+        test_dataset = DatasetClass(image_paths=image_paths, labels=labels, **dataset_args)
+        return None, None, DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     train_paths, test_paths, train_labels, test_labels = train_test_split(
         image_paths, labels, test_size=test_size, random_state=42, stratify=labels)
     train_paths, val_paths, train_labels, val_labels = train_test_split(
         train_paths, train_labels, test_size=val_size, random_state=42, stratify=train_labels)
 
-    if dataset_type == '3D':
-        train_dataset = NiftiDataset3D(train_paths, train_labels, resize_shape=resize_shape, augment=augment)
-        val_dataset = NiftiDataset3D(val_paths, val_labels, resize_shape=resize_shape)
-        test_dataset = NiftiDataset3D(test_paths, test_labels, resize_shape=resize_shape)
-    else:
-        train_dataset = NiftiDataset2D(train_paths, train_labels, resize_shape=resize_shape, slice_axis=slice_axis, augment=augment)
-        val_dataset = NiftiDataset2D(val_paths, val_labels, resize_shape=resize_shape, slice_axis=slice_axis)
-        test_dataset = NiftiDataset2D(test_paths, test_labels, resize_shape=resize_shape, slice_axis=slice_axis)
+    print(f"Training set: {len(train_paths)} images, Validation set: {len(val_paths)} images, Test set: {len(test_paths)} images")
+
+    train_dataset = DatasetClass(image_paths=train_paths, labels=train_labels, **dataset_args)
+    val_dataset = DatasetClass(image_paths=val_paths, labels=val_labels, **dataset_args)
+    test_dataset = DatasetClass(image_paths=test_paths, labels=test_labels, **dataset_args)
 
     print("Number of images per class in training set:")
     unique_labels, counts = np.unique(train_dataset.labels, return_counts=True)
